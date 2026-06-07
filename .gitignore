@@ -1,0 +1,27 @@
+# Secrets & local machine state — never commit
+# settings.json: user-configured URL/key/model (plaintext)
+settings.json
+# state.json: per-app theming/hide state (local desktop paths)
+state.json
+# name_backup.json: legacy local backup
+name_backup.json
+
+# Developer-specific app list + source images — not needed to use the app
+# (the GUI scans the live desktop; identity hints are optional)
+apps.json
+input/
+
+# Generated output (icons, archive, caches, scratch screenshots/scripts)
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+Thumbs.db
+.idea/
+.vscode/

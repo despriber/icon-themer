@@ -1,0 +1,19 @@
+{
+  "name": "oneshot",
+  "display_name": "OneShot (Niko / pixel)",
+  "size": "1024x1024",
+  "palette": {
+    "bg_dark": "#1a0f2e",
+    "bg_purple": "#241537",
+    "sun_orange": "#ff9d3c",
+    "warm_yellow": "#fff2a8",
+    "coral_outline": "#ff8a7a",
+    "purple_shadow": "#4a2d6b"
+  },
+  "pixel_art": {
+    "enabled": true,
+    "source_size": 32,
+    "colors": 32
+  },
+  "base_prompt": "Pixel art app icon drawn in the exact visual style of the 2016 indie game OneShot (by Nightmargin / Future Cat). Authentic low-resolution 16-bit SNES-era JRPG and RPG Maker sprite art, as if hand-placed pixel by pixel on a roughly 48x48 grid: large, clearly visible square pixels with hard, aliased, stair-stepped edges. Absolutely no anti-aliasing, no smoothing, no sub-pixel detail. Use a tight, limited, indexed color palette that is warm and slightly desaturated, capturing OneShot's signature 'a warm light glowing in the dark' look: deep purple-black shadows (#1a0f2e and #241537), muted indigo-purple midtones (#4a2d6b), warm amber and sun-orange highlights (#ff9d3c), a soft glowing warm-yellow core light (#fff2a8), and thin coral-red outlines (#ff8a7a). Recolor the subject into this restricted palette while keeping its identifying shapes and signature colors clearly recognizable. Lighting is the heart of this style: illuminate the subject with a single warm light source, like the glowing Sun lightbulb that Niko carries in OneShot. Pool a cozy orange-amber glow across the lit side of the subject, trace a soft warm rim-light along its silhouette, and drop the opposite side into cool deep-purple shadow. The overall mood is dim, cozy, melancholic, dreamlike and atmospheric. Shade using flat cel-shaded bands of solid color separated by hard pixel steps, and render every gradient, glow falloff or shadow transition with deliberate pixel dithering (ordered checkerboard dithering) instead of smooth blends. Add a faint dithered ambient glow halo around the subject. Composition: a single icon subject, centered, with a bold and simple silhouette that stays readable at 32x32 pixels, surrounded by generous empty margin. Place it on a plain, flat, solid dark-purple background of one uniform color that exists only to be cleanly removed; no scenery, no rounded-rectangle app badge, no frame, no ground shadow. Strictly avoid: 3D rendering, isometric perspective, depth or extrusion, beveled edges, glossy or specular highlights, smooth gradients, anti-aliasing, vector-clean curves, painterly brush strokes, photorealism, high-detail HD rendering, drop shadows, text, letters, words, UI windows and screenshots."
+}

@@ -1,0 +1,6 @@
+PySide6==6.7.3
+openai>=1.40
+pillow>=10.0
+tomli>=2.0; python_version < "3.11"
+# SOCKS proxy support for httpx (needed when ALL_PROXY/HTTPS_PROXY uses socks5://)
+httpx[socks]>=0.23

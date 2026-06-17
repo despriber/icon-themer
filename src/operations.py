@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from config import (
-    ASSETS_DIR, CACHE_DIR, OUTPUT_DIR, POWERSHELL_SCRIPTS_DIR, load_theme,
+    CACHE_DIR, OUTPUT_DIR, POWERSHELL_SCRIPTS_DIR, load_theme,
 )
 from generate import generate_edit, generate_text, style_prompt
 from postprocess import to_ico
@@ -25,6 +25,7 @@ import state as state_mod
 
 NBSP = " "
 ARROW_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons"
+BLANK_ARROW_RESOURCE = r"%windir%\System32\shell32.dll,-50"
 
 
 # --- helpers --------------------------------------------------------------
@@ -368,11 +369,8 @@ def restore_app(app: dict):
 def set_arrows(hidden: bool, restart_explorer: bool = True):
     """Hide/show ALL shortcut arrows (Windows overlay #29 is global)."""
     if hidden:
-        blank = ASSETS_DIR / "blank.ico"
-        if not blank.exists():
-            raise FileNotFoundError(f"blank icon missing: {blank}")
         key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH)
-        winreg.SetValueEx(key, "29", 0, winreg.REG_SZ, f"{blank},0")
+        winreg.SetValueEx(key, "29", 0, winreg.REG_SZ, BLANK_ARROW_RESOURCE)
         winreg.CloseKey(key)
     else:
         try:

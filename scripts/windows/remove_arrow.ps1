@@ -14,7 +14,7 @@ param(
 )
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-if (-not $BlankIcon) { $BlankIcon = Join-Path $ProjectRoot "assets\blank.ico" }
+if (-not $BlankIcon) { $BlankIcon = '%windir%\System32\shell32.dll,-50' }
 
 function Write-Log($msg) {
     Write-Output $msg
@@ -46,10 +46,9 @@ if ($Restore) {
         Write-Log "no override present"
     }
 } else {
-    if (-not (Test-Path $BlankIcon)) { throw "Blank icon not found: $BlankIcon" }
     if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
     # value format: "<path>,<index>"
-    Set-ItemProperty -Path $key -Name '29' -Value ("$BlankIcon,0") -Type String
+    Set-ItemProperty -Path $key -Name '29' -Value $BlankIcon -Type String
     Write-Log "set overlay 29 -> $BlankIcon (arrows hidden)"
 }
 

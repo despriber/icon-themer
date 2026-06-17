@@ -88,6 +88,27 @@ def _to_low_res(img: Image.Image, n: int, colors: int = 0) -> Image.Image:
     return small
 
 
+def _save_windows_ico(frames: dict[int, Image.Image], ico_path: Path) -> None:
+    """Write an Explorer-friendly ICO using BMP/DIB frames for every size.
+
+    Pillow's default ICO writer stores PNG-compressed frames for every size, and
+    Explorer can render those as black blocks while rebuilding the icon cache.
+    `bitmap_format="bmp"` keeps the file larger but follows the older shell
+    paths reliably, including when shortcut overlays are changed.
+    """
+    sizes = sorted(frames)
+    largest = max(sizes)
+    base = frames[largest].convert("RGBA")
+    append = [frames[s].convert("RGBA") for s in sizes if s != largest]
+    base.save(
+        ico_path,
+        format="ICO",
+        sizes=[(s, s) for s in sizes],
+        append_images=append,
+        bitmap_format="bmp",
+    )
+
+
 def to_ico(
     png_path: Path,
     ico_path: Path | None = None,
@@ -120,19 +141,19 @@ def to_ico(
         largest = max(ICO_SIZES)
         base = low.resize((largest, largest), Image.Resampling.NEAREST)
         frames = {s: low.resize((s, s), Image.Resampling.NEAREST) for s in ICO_SIZES}
-        base.save(
-            ico_path, format="ICO", sizes=[(s, s) for s in ICO_SIZES],
-            append_images=[frames[s] for s in ICO_SIZES if s != largest],
-        )
+        _save_windows_ico(frames, ico_path)
         # Also drop a crisp 256 PNG preview alongside the .ico.
         base.save(ico_path.with_name(ico_path.stem + "_preview.png"))
-        print(f"[postprocess] saved {ico_path} (pixel grid={n}, colors={colors or 'full'})")
+        print(
+            f"[postprocess] saved {ico_path} "
+            f"(pixel grid={n}, colors={colors or 'full'}, format=DIB)"
+        )
         return ico_path
 
     largest = max(ICO_SIZES)
-    img = img.resize((largest, largest), Image.Resampling.LANCZOS)
-    img.save(ico_path, format="ICO", sizes=[(s, s) for s in ICO_SIZES])
-    print(f"[postprocess] saved {ico_path} (sizes={ICO_SIZES})")
+    frames = {s: img.resize((s, s), Image.Resampling.LANCZOS) for s in ICO_SIZES}
+    _save_windows_ico(frames, ico_path)
+    print(f"[postprocess] saved {ico_path} (sizes={ICO_SIZES}, format=DIB)")
     return ico_path
 
 

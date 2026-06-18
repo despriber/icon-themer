@@ -109,6 +109,27 @@ def _save_windows_ico(frames: dict[int, Image.Image], ico_path: Path) -> None:
     )
 
 
+def build_blank_overlay_ico(dest_path: Path) -> Path:
+    """Write a fully-transparent .ico for use as the shortcut-arrow overlay (#29).
+
+    Explorer composites the overlay icon onto every shortcut at small sizes only
+    (16-48px, picked by DPI). Two things make a "blank" overlay render as an opaque
+    black square instead of nothing:
+      * PNG-compressed frames — the overlay-compositing path (especially a cold-boot
+        icon-cache rebuild) can't decode them and falls back to black. So we force
+        DIB/BMP frames via _save_windows_ico.
+      * a missing 256px frame is fine here; overlays never request it, and a 256 DIB
+        only bloats the file, so we keep to the small sizes the shell actually uses.
+    Every pixel is (0,0,0,0): zero alpha => Pillow emits an all-transparent AND mask.
+    """
+    dest_path = Path(dest_path)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    sizes = [16, 20, 24, 32, 40, 48]
+    frames = {s: Image.new("RGBA", (s, s), (0, 0, 0, 0)) for s in sizes}
+    _save_windows_ico(frames, dest_path)
+    return dest_path
+
+
 def to_ico(
     png_path: Path,
     ico_path: Path | None = None,

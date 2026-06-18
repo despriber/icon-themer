@@ -70,11 +70,19 @@ if (Test-Path $appsFile) {
 } else { Write-Log "[icon] no apps.json, skipping" }
 
 # 3) restore shortcut arrows ------------------------------------------------
+# Remove the overlay #29 override AND re-assert IsShortcut on lnkfile/piffile. The
+# latter heals machines where an older version hid arrows by deleting IsShortcut,
+# which breaks .lnk launching ("no app associated with this file").
 $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons'
 if (Test-Path $key) {
     Remove-ItemProperty -Path $key -Name '29' -ErrorAction SilentlyContinue
     Write-Log "[arrow] overlay override removed"
 } else { Write-Log "[arrow] no override present" }
+foreach ($cls in @('HKLM:\SOFTWARE\Classes\lnkfile', 'HKLM:\SOFTWARE\Classes\piffile')) {
+    if (-not (Test-Path $cls)) { New-Item -Path $cls -Force | Out-Null }
+    Set-ItemProperty -Path $cls -Name 'IsShortcut' -Value '' -Type String
+}
+Write-Log "[arrow] IsShortcut re-asserted (shortcut launching healed)"
 
 # restart explorer to apply all of the above
 try {

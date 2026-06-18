@@ -18,16 +18,25 @@ from config import (
     CACHE_DIR, OUTPUT_DIR, POWERSHELL_SCRIPTS_DIR, load_theme,
 )
 from generate import generate_edit, generate_text, style_prompt
-from postprocess import to_ico
+from postprocess import build_blank_overlay_ico, to_ico
 import archive
 import settings as settings_mod
 import state as state_mod
 
 NBSP = " "
 ARROW_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons"
-# Per-class markers that enable the shortcut-arrow overlay. Deleting them disables
-# the overlay outright (see set_arrows for why we prefer this over overlay #29).
+# Per-class marker that tells the shell a .lnk/.pif is a shortcut: resolve & launch
+# its target on double-click AND draw the arrow overlay. We must KEEP this — deleting
+# it (an old approach to hiding arrows) breaks shortcut launching on Win11 with
+# "no app associated with this file". See set_arrows for the overlay-based method.
 SHORTCUT_CLASS_KEYS = (r"SOFTWARE\Classes\lnkfile", r"SOFTWARE\Classes\piffile")
+# Stable machine-wide location for the transparent overlay icon. #29 is an HKLM
+# (all-users) setting, so the icon must live somewhere always-mounted and readable
+# by SYSTEM at boot — not inside the project folder, which may move or be cleaned.
+OVERLAY_ICO_PATH = (
+    Path(os.environ.get("ProgramData", r"C:\ProgramData"))
+    / "icon-themer" / "blank_overlay.ico"
+)
 
 
 # --- helpers --------------------------------------------------------------
@@ -371,34 +380,24 @@ def restore_app(app: dict):
 def set_arrows(hidden: bool, restart_explorer: bool = True):
     """Hide/show ALL shortcut arrows.
 
-    Mechanism: toggle the per-class ``IsShortcut`` marker on ``lnkfile``/``piffile``
-    instead of pointing overlay #29 at a blank icon. The blank-overlay trick keeps
-    an overlay registered, so Explorer still composites it onto every shortcut; a
-    cold-boot icon-cache rebuild can race and bake an opaque black square into the
-    overlay region (the failure recurs on reboot and only clears after a manual
-    toggle). Removing IsShortcut drops the overlay entirely — nothing is composited,
-    so no black square can appear — and it stays gone across reboots. Reversible by
-    writing IsShortcut back as an empty string.
-    """
-    if hidden:
-        for cls in SHORTCUT_CLASS_KEYS:
-            try:
-                key = winreg.OpenKey(
-                    winreg.HKEY_LOCAL_MACHINE, cls, 0, winreg.KEY_SET_VALUE
-                )
-                winreg.DeleteValue(key, "IsShortcut")
-                winreg.CloseKey(key)
-            except FileNotFoundError:
-                pass
-    else:
-        for cls in SHORTCUT_CLASS_KEYS:
-            key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, cls)
-            winreg.SetValueEx(key, "IsShortcut", 0, winreg.REG_SZ, "")
-            winreg.CloseKey(key)
+    Mechanism: point overlay #29 (``Shell Icons``) at a fully-transparent icon, so
+    Explorer composites *nothing* visible onto shortcuts while still treating them as
+    shortcuts. We deliberately do NOT touch ``IsShortcut`` — deleting it (an earlier
+    approach) hides the arrow but breaks double-click launching on Win11 ("no app
+    associated with this file"). Instead we always ensure ``IsShortcut`` is present,
+    which also self-heals any machine left broken by that older version.
 
-    # Either way, drop any legacy overlay-#29 override left by older versions so the
-    # two mechanisms can't fight each other.
-    _clear_overlay_override()
+    The classic "black square in the overlay corner" failure of the #29 trick comes
+    from a PNG-encoded or missing-path overlay icon; build_blank_overlay_ico writes
+    DIB frames and we store it at a stable machine path to avoid both. Reversible:
+    showing arrows just removes the #29 override.
+    """
+    _ensure_is_shortcut()  # keep launching working; heal machines broken by old code
+
+    if hidden:
+        _set_overlay_override(str(_ensure_overlay_ico()))
+    else:
+        _clear_overlay_override()
 
     state = state_mod.load_state()
     state_mod.set_arrows_hidden(state, hidden)
@@ -408,8 +407,33 @@ def set_arrows(hidden: bool, restart_explorer: bool = True):
         _restart_explorer(clear_icon_cache=True)
 
 
+def _ensure_is_shortcut():
+    """Make sure lnkfile/piffile carry the ``IsShortcut`` marker (idempotent).
+
+    Without it, Win11 stops resolving .lnk targets and double-click fails. Writing it
+    back is harmless if already present, so this doubles as a repair step."""
+    for cls in SHORTCUT_CLASS_KEYS:
+        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, cls)
+        winreg.SetValueEx(key, "IsShortcut", 0, winreg.REG_SZ, "")
+        winreg.CloseKey(key)
+
+
+def _ensure_overlay_ico() -> Path:
+    """Return the transparent overlay icon, building it at the stable path if absent."""
+    if not OVERLAY_ICO_PATH.exists():
+        build_blank_overlay_ico(OVERLAY_ICO_PATH)
+    return OVERLAY_ICO_PATH
+
+
+def _set_overlay_override(ico_path: str):
+    """Point HKLM ``Shell Icons\\29`` (the shortcut-arrow overlay) at ``ico_path``."""
+    key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH)
+    winreg.SetValueEx(key, "29", 0, winreg.REG_SZ, ico_path)
+    winreg.CloseKey(key)
+
+
 def _clear_overlay_override():
-    """Remove a legacy HKLM ``Shell Icons\\29`` blank-overlay override if present."""
+    """Remove the HKLM ``Shell Icons\\29`` overlay override if present."""
     try:
         key = winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH, 0, winreg.KEY_SET_VALUE

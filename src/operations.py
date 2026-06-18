@@ -25,7 +25,9 @@ import state as state_mod
 
 NBSP = " "
 ARROW_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons"
-BLANK_ARROW_RESOURCE = r"%windir%\System32\shell32.dll,-50"
+# Per-class markers that enable the shortcut-arrow overlay. Deleting them disables
+# the overlay outright (see set_arrows for why we prefer this over overlay #29).
+SHORTCUT_CLASS_KEYS = (r"SOFTWARE\Classes\lnkfile", r"SOFTWARE\Classes\piffile")
 
 
 # --- helpers --------------------------------------------------------------
@@ -367,31 +369,78 @@ def restore_app(app: dict):
 # --- global shortcut-arrow toggle ----------------------------------------
 
 def set_arrows(hidden: bool, restart_explorer: bool = True):
-    """Hide/show ALL shortcut arrows (Windows overlay #29 is global)."""
+    """Hide/show ALL shortcut arrows.
+
+    Mechanism: toggle the per-class ``IsShortcut`` marker on ``lnkfile``/``piffile``
+    instead of pointing overlay #29 at a blank icon. The blank-overlay trick keeps
+    an overlay registered, so Explorer still composites it onto every shortcut; a
+    cold-boot icon-cache rebuild can race and bake an opaque black square into the
+    overlay region (the failure recurs on reboot and only clears after a manual
+    toggle). Removing IsShortcut drops the overlay entirely — nothing is composited,
+    so no black square can appear — and it stays gone across reboots. Reversible by
+    writing IsShortcut back as an empty string.
+    """
     if hidden:
-        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH)
-        winreg.SetValueEx(key, "29", 0, winreg.REG_SZ, BLANK_ARROW_RESOURCE)
-        winreg.CloseKey(key)
+        for cls in SHORTCUT_CLASS_KEYS:
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE, cls, 0, winreg.KEY_SET_VALUE
+                )
+                winreg.DeleteValue(key, "IsShortcut")
+                winreg.CloseKey(key)
+            except FileNotFoundError:
+                pass
     else:
-        try:
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH, 0, winreg.KEY_SET_VALUE
-            )
-            winreg.DeleteValue(key, "29")
+        for cls in SHORTCUT_CLASS_KEYS:
+            key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, cls)
+            winreg.SetValueEx(key, "IsShortcut", 0, winreg.REG_SZ, "")
             winreg.CloseKey(key)
-        except FileNotFoundError:
-            pass
+
+    # Either way, drop any legacy overlay-#29 override left by older versions so the
+    # two mechanisms can't fight each other.
+    _clear_overlay_override()
 
     state = state_mod.load_state()
     state_mod.set_arrows_hidden(state, hidden)
     state_mod.save_state(state)
 
     if restart_explorer:
-        _restart_explorer()
+        _restart_explorer(clear_icon_cache=True)
 
 
-def _restart_explorer():
+def _clear_overlay_override():
+    """Remove a legacy HKLM ``Shell Icons\\29`` blank-overlay override if present."""
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE, ARROW_REG_PATH, 0, winreg.KEY_SET_VALUE
+        )
+        winreg.DeleteValue(key, "29")
+        winreg.CloseKey(key)
+    except FileNotFoundError:
+        pass
+
+
+def _purge_icon_cache():
+    """Delete cached icon DBs so a stale black-square overlay can't survive a toggle.
+
+    The files are locked while Explorer is running, so this must be called in the
+    window between killing and relaunching explorer.exe.
+    """
+    local = os.environ.get("LOCALAPPDATA")
+    if not local:
+        return
+    cache_dir = Path(local) / "Microsoft" / "Windows" / "Explorer"
+    for db in cache_dir.glob("iconcache_*.db"):
+        try:
+            db.unlink()
+        except OSError:
+            pass
+
+
+def _restart_explorer(clear_icon_cache: bool = False):
     subprocess.run(["taskkill", "/f", "/im", "explorer.exe"],
                    capture_output=True)
+    if clear_icon_cache:
+        _purge_icon_cache()
     time.sleep(1)
     subprocess.Popen(["explorer.exe"])

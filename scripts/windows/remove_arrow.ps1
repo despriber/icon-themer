@@ -1,7 +1,13 @@
 <#
 Hide (or restore) the desktop shortcut arrow overlay.
-Points Explorer's shortcut-overlay icon (resource 29) at a transparent .ico,
-then restarts Explorer. Reversible with -Restore. Requires admin (HKLM).
+
+Disables the overlay by deleting the per-class `IsShortcut` marker on lnkfile and
+piffile, then restarts Explorer. This is preferred over pointing overlay #29 at a
+blank icon: with no overlay registered Explorer composites nothing onto shortcuts,
+so a cold-boot icon-cache rebuild can't bake an opaque black square into the arrow
+region (the classic "black square after reboot" bug). Reversible with -Restore.
+Requires admin (HKLM). Also clears any legacy overlay-#29 override and the icon
+cache so a previously-cached black square disappears immediately.
 
 Usage:
   powershell -File scripts\windows\remove_arrow.ps1            # hide arrows
@@ -9,12 +15,8 @@ Usage:
 #>
 param(
     [switch]$Restore,
-    [string]$BlankIcon,
     [string]$LogFile
 )
-
-$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-if (-not $BlankIcon) { $BlankIcon = '%windir%\System32\shell32.dll,-50' }
 
 function Write-Log($msg) {
     Write-Output $msg
@@ -27,7 +29,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administra
     $log = Join-Path $env:TEMP "remove_arrow_elevated.log"
     if (Test-Path $log) { Remove-Item $log -Force }
     $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File', "`"$PSCommandPath`"",
-                 '-BlankIcon', "`"$BlankIcon`"", '-LogFile', "`"$log`"")
+                 '-LogFile', "`"$log`"")
     if ($Restore) { $argList += '-Restore' }
     Write-Output "Requesting administrator (UAC prompt)..."
     Start-Process powershell -Verb RunAs -ArgumentList $argList -Wait
@@ -36,28 +38,45 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administra
     return
 }
 
-$key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons'
+$classKeys = @(
+    'HKLM:\SOFTWARE\Classes\lnkfile',
+    'HKLM:\SOFTWARE\Classes\piffile'
+)
 
 if ($Restore) {
-    if (Test-Path $key) {
-        Remove-ItemProperty -Path $key -Name '29' -ErrorAction SilentlyContinue
-        Write-Log "removed overlay override (arrows restored)"
-    } else {
-        Write-Log "no override present"
+    foreach ($k in $classKeys) {
+        if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }
+        # Presence of IsShortcut (empty string) re-enables the overlay.
+        Set-ItemProperty -Path $k -Name 'IsShortcut' -Value '' -Type String
     }
+    Write-Log "restored IsShortcut markers (arrows shown)"
 } else {
-    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
-    # value format: "<path>,<index>"
-    Set-ItemProperty -Path $key -Name '29' -Value $BlankIcon -Type String
-    Write-Log "set overlay 29 -> $BlankIcon (arrows hidden)"
+    foreach ($k in $classKeys) {
+        if (Test-Path $k) {
+            Remove-ItemProperty -Path $k -Name 'IsShortcut' -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Log "removed IsShortcut markers (arrows hidden)"
 }
 
-# Rebuild icon cache and restart Explorer so the change shows immediately.
+# Clean up any legacy overlay-#29 blank-icon override so the two methods don't fight.
+$overlayKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons'
+if (Test-Path $overlayKey) {
+    Remove-ItemProperty -Path $overlayKey -Name '29' -ErrorAction SilentlyContinue
+}
+
+# Restart Explorer, clearing the icon cache while it is stopped so a stale
+# black-square overlay can't survive the toggle.
 try {
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 1
+    $cache = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Explorer'
+    if (Test-Path $cache) {
+        Get-ChildItem -Path $cache -Filter 'iconcache_*.db' -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
     Start-Process explorer
-    Write-Log "explorer restarted"
+    Write-Log "explorer restarted (icon cache cleared)"
 } catch {
     Write-Log "WARN could not restart explorer: $($_.Exception.Message)"
 }

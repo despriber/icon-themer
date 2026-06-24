@@ -30,13 +30,18 @@ ARROW_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icon
 # it (an old approach to hiding arrows) breaks shortcut launching on Win11 with
 # "no app associated with this file". See set_arrows for the overlay-based method.
 SHORTCUT_CLASS_KEYS = (r"SOFTWARE\Classes\lnkfile", r"SOFTWARE\Classes\piffile")
-# Stable machine-wide location for the transparent overlay icon. #29 is an HKLM
-# (all-users) setting, so the icon must live somewhere always-mounted and readable
-# by SYSTEM at boot — not inside the project folder, which may move or be cleaned.
+# Stable machine-wide location for the overlay icon. #29 is an HKLM (all-users)
+# setting, so the icon must live somewhere always-mounted and readable by SYSTEM at
+# boot — not inside the project folder, which may move or be cleaned. The "_v2"
+# suffix forces machines off the older fully-transparent icon, which corrupts to a
+# black square on reboot / new shortcuts (see build_blank_overlay_ico).
 OVERLAY_ICO_PATH = (
     Path(os.environ.get("ProgramData", r"C:\ProgramData"))
-    / "icon-themer" / "blank_overlay.ico"
+    / "icon-themer" / "blank_overlay_v2.ico"
 )
+# The superseded fully-transparent overlay; deleted whenever we (re)build v2 so the
+# bad file can't be picked up again.
+LEGACY_OVERLAY_ICO_PATH = OVERLAY_ICO_PATH.with_name("blank_overlay.ico")
 
 
 # --- helpers --------------------------------------------------------------
@@ -388,9 +393,12 @@ def set_arrows(hidden: bool, restart_explorer: bool = True):
     which also self-heals any machine left broken by that older version.
 
     The classic "black square in the overlay corner" failure of the #29 trick comes
-    from a PNG-encoded or missing-path overlay icon; build_blank_overlay_ico writes
-    DIB frames and we store it at a stable machine path to avoid both. Reversible:
-    showing arrows just removes the #29 override.
+    from the overlay icon being *fully transparent*, which Windows corrupts to an
+    opaque black square whenever it rebuilds the overlay image list cold (every boot,
+    and for new shortcuts). build_blank_overlay_ico defeats this by leaving one
+    near-invisible non-transparent pixel; we store it at a stable machine path so
+    SYSTEM can read it at boot. Reversible: showing arrows just removes the #29
+    override.
     """
     _ensure_is_shortcut()  # keep launching working; heal machines broken by old code
 
@@ -419,9 +427,17 @@ def _ensure_is_shortcut():
 
 
 def _ensure_overlay_ico() -> Path:
-    """Return the transparent overlay icon, building it at the stable path if absent."""
-    if not OVERLAY_ICO_PATH.exists():
-        build_blank_overlay_ico(OVERLAY_ICO_PATH)
+    """(Re)build the overlay icon at the stable path and return it.
+
+    Rebuilt every time (not just when missing) so any machine still carrying the old
+    fully-transparent overlay — which corrupts to a black square on reboot / new
+    shortcuts — is upgraded to the one-pixel icon the moment arrows are hidden. The
+    superseded file is removed so it can't be referenced again."""
+    build_blank_overlay_ico(OVERLAY_ICO_PATH)
+    try:
+        LEGACY_OVERLAY_ICO_PATH.unlink()
+    except OSError:
+        pass
     return OVERLAY_ICO_PATH
 
 

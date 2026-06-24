@@ -1,4 +1,5 @@
 """Turn a restyled PNG into a multi-resolution Windows .ico."""
+import struct
 from pathlib import Path
 
 from PIL import Image
@@ -110,24 +111,59 @@ def _save_windows_ico(frames: dict[int, Image.Image], ico_path: Path) -> None:
 
 
 def build_blank_overlay_ico(dest_path: Path) -> Path:
-    """Write a fully-transparent .ico for use as the shortcut-arrow overlay (#29).
+    """Write the shortcut-arrow overlay icon (#29): transparent except ONE pixel.
 
-    Explorer composites the overlay icon onto every shortcut at small sizes only
-    (16-48px, picked by DPI). Two things make a "blank" overlay render as an opaque
-    black square instead of nothing:
-      * PNG-compressed frames — the overlay-compositing path (especially a cold-boot
-        icon-cache rebuild) can't decode them and falls back to black. So we force
-        DIB/BMP frames via _save_windows_ico.
-      * a missing 256px frame is fine here; overlays never request it, and a 256 DIB
-        only bloats the file, so we keep to the small sizes the shell actually uses.
-    Every pixel is (0,0,0,0): zero alpha => Pillow emits an all-transparent AND mask.
+    A *fully* transparent overlay icon triggers a long-standing Windows bug. When
+    Explorer rebuilds its overlay image list cold — at every session start (so every
+    reboot) and when compositing the overlay onto a freshly-created shortcut not yet
+    in the icon cache — an all-transparent overlay corrupts to an opaque BLACK square
+    in the icon corner, then "self-heals" on a later repaint. Icon format (DIB vs
+    PNG), file path and AND-mask correctness do NOT fix it; the trigger is the full
+    transparency itself (a fully-transparent shell32,-50 overlay fails the same way).
+
+    Fix: make the icon *not* fully transparent. One corner pixel gets a minimal
+    non-zero alpha (1/255 — imperceptible on screen) and a cleared AND-mask bit, so
+    Windows treats the icon as a genuine bitmap and honours its alpha channel; every
+    other pixel stays transparent and no black square is ever baked in.
+
+    Written by hand as classic 32bpp DIB/BMP frames — Pillow's current ICO writer
+    emits a malformed AND mask once any alpha is present — at the small sizes the
+    overlay compositor actually requests (16-48px, picked by DPI).
     """
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    sizes = [16, 20, 24, 32, 40, 48]
-    frames = {s: Image.new("RGBA", (s, s), (0, 0, 0, 0)) for s in sizes}
-    _save_windows_ico(frames, dest_path)
+    dest_path.write_bytes(_overlay_ico_bytes([16, 20, 24, 32, 40, 48]))
     return dest_path
+
+
+def _overlay_ico_bytes(sizes: list[int]) -> bytes:
+    """Build a near-transparent multi-size .ico (one alpha=1 corner pixel per frame).
+
+    See build_blank_overlay_ico for why that single non-transparent pixel matters."""
+    frames = []
+    for s in sizes:
+        # BITMAPINFOHEADER: 32bpp BGRA, height doubled for the XOR + AND bitmaps.
+        header = struct.pack("<IiiHHIIiiII", 40, s, s * 2, 1, 32, 0, 0, 0, 0, 0, 0)
+        # XOR pixels: all (0,0,0,0) except the bottom-right pixel's alpha = 1. DIB
+        # rows are stored bottom-up, so file row 0 is the bottom display row.
+        xor = bytearray(s * s * 4)
+        xor[(s - 1) * 4 + 3] = 1
+        # AND mask: 0xFF (transparent) everywhere except that same pixel, whose bit
+        # we clear (0 = opaque) so legacy GDI paths also see the icon carrying content.
+        row_bytes = ((s + 31) // 32) * 4
+        and_mask = bytearray(b"\xff" * (row_bytes * s))
+        col = s - 1
+        and_mask[col // 8] &= (~(0x80 >> (col % 8))) & 0xFF
+        frames.append(header + bytes(xor) + bytes(and_mask))
+    out = bytearray(struct.pack("<HHH", 0, 1, len(sizes)))  # ICONDIR
+    offset = 6 + 16 * len(sizes)                            # entries follow the dir
+    for s, frame in zip(sizes, frames):
+        dim = 0 if s >= 256 else s  # 0 encodes 256 in an ICONDIRENTRY width/height
+        out += struct.pack("<BBBBHHII", dim, dim, 0, 0, 1, 32, len(frame), offset)
+        offset += len(frame)
+    for frame in frames:
+        out += frame
+    return bytes(out)
 
 
 def to_ico(

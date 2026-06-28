@@ -14,8 +14,11 @@ import sys
 import traceback
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE / "src"))
+FROZEN = bool(getattr(sys, "frozen", False))
+HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+
+if not FROZEN:
+    sys.path.insert(0, str(HERE / "src"))
 
 
 # --- elevation ------------------------------------------------------------
@@ -28,7 +31,7 @@ def _is_admin() -> bool:
 
 
 def _relaunch_as_admin() -> None:
-    params = " ".join(f'"{a}"' for a in sys.argv)
+    params = " ".join(f'"{a}"' for a in (sys.argv[1:] if FROZEN else sys.argv))
     ctypes.windll.shell32.ShellExecuteW(
         None, "runas", sys.executable, params, str(HERE), 1
     )

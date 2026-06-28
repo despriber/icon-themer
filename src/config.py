@@ -1,13 +1,22 @@
 """Shared paths and helpers for icon-themer."""
 import json
 import os
+import sys
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:  # Python 3.10 and earlier
     import tomli as tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _app_root() -> Path:
+    """Return the writable application root for source and packaged runs."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+ROOT = _app_root()
 
 # --- Credentials: reuse the Codex CLI config (key + relay base_url) ---
 CODEX_DIR = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))

@@ -1,8 +1,14 @@
 # icon-themer
 
+[Download for Windows](https://github.com/despriber/icon-themer/releases/download/v0.1.0/IconThemer-v0.1.0-windows-x64.zip) · [Screenshots](#screenshots) · **Restore is supported**
+
+> Windows 一键版：下载 zip 后解压，双击 `IconThemer.exe` 运行。应用会请求管理员权限，用于修改公共桌面快捷方式、文件夹图标和快捷方式箭头；所有改动都可以在工具内一键恢复。
+
 一个 Windows 桌面 GUI 工具：用图像生成模型把桌面上的**快捷方式和文件夹图标**批量重绘成统一画风
 （内置 OneShot 像素风主题），让桌面整体协调好看。全程**可逆**——随时一键恢复原图标和原名称。
 可支持自定义主题，也可通过上传桌面背景等图片，由图文模型生成主题！
+
+## Screenshots
 
 ### 主界面
 

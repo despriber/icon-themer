@@ -12,6 +12,7 @@ HKLM arrow-overlay registry write work without repeated UAC prompts.
 import ctypes
 import sys
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
@@ -146,6 +147,7 @@ class GenerateWorker(QThread):
     progress = Signal(str, str)     # key, stage
     item_done = Signal(dict)        # {app, preview, ico}
     finished_all = Signal(list)
+    MAX_WORKERS = 5
 
     def __init__(self, apps, theme, identities, pixelate=None):
         super().__init__()
@@ -154,24 +156,31 @@ class GenerateWorker(QThread):
         self.identities = identities
         self.pixelate = pixelate
 
+    def _generate_one(self, app):
+        key = app["key"]
+
+        def cb(stage, frac=None, _k=key):
+            self.progress.emit(_k, stage)
+
+        identity = self.identities.get(app["display_name"])
+        preview, ico = operations.generate_styled(
+            app, self.theme, cb, identity=identity, pixelate=self.pixelate
+        )
+        return {"app": app, "preview": preview, "ico": ico}
+
     def run(self):
         results = []
-        for app in self.apps:
-            key = app["key"]
-
-            def cb(stage, frac=None, _k=key):
-                self.progress.emit(_k, stage)
-
-            try:
-                identity = self.identities.get(app["display_name"])
-                preview, ico = operations.generate_styled(
-                    app, self.theme, cb, identity=identity, pixelate=self.pixelate
-                )
-                r = {"app": app, "preview": preview, "ico": ico}
-                results.append(r)
-                self.item_done.emit(r)
-            except Exception as exc:
-                self.progress.emit(key, f"失败: {exc}")
+        workers = min(self.MAX_WORKERS, max(1, len(self.apps)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(self._generate_one, app): app for app in self.apps}
+            for fut in as_completed(futures):
+                app = futures[fut]
+                try:
+                    r = fut.result()
+                    results.append(r)
+                    self.item_done.emit(r)
+                except Exception as exc:
+                    self.progress.emit(app["key"], f"失败: {exc}")
         self.finished_all.emit(results)
 
 

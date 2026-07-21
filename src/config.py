@@ -41,10 +41,21 @@ def codex_credentials():
         cfg = CODEX_DIR / "config.toml"
         if cfg.exists():
             data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+            # Prefer the active provider's base_url, then Codex's top-level
+            # openai_base_url (used when model_provider="openai" points at a
+            # relay), then any configured custom provider.
             provider_name = data.get("model_provider", "")
             providers = data.get("model_providers") or {}
-            provider = providers.get(provider_name, {})
-            base_url = provider.get("base_url")
+            provider = providers.get(provider_name) or {}
+            base_url = (
+                provider.get("base_url")
+                or data.get("openai_base_url")
+                or next(
+                    (p.get("base_url") for p in providers.values()
+                     if isinstance(p, dict) and p.get("base_url")),
+                    None,
+                )
+            )
 
     if base_url:
         base_url = base_url.rstrip("/")

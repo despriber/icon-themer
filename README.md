@@ -1,6 +1,6 @@
 # icon-themer
 
-[Download for Windows](https://github.com/despriber/icon-themer/releases/download/v0.1.0/IconThemer-v0.1.0-windows-x64.zip) · [Screenshots](#screenshots) · **Restore is supported**
+[Download for Windows](https://github.com/despriber/icon-themer/releases/download/v0.1.1/IconThemer-v0.1.1-windows-x64.zip) · [Screenshots](#screenshots) · **Restore is supported**
 
 > Windows 一键版：下载 zip 后解压，双击 `IconThemer.exe` 运行。应用会请求管理员权限，用于修改公共桌面快捷方式、文件夹图标和快捷方式箭头；所有改动都可以在工具内一键恢复。
 

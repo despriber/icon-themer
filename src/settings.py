@@ -1,6 +1,6 @@
 """User-editable model settings (overrides the Codex CLI defaults).
 
-settings.json (repo root, local only — holds plaintext keys, never committed):
+settings.json (in the per-user data directory, holds plaintext keys):
 
   {
     "image":  {"base_url": "", "api_key": "", "model": "gpt-image-2",

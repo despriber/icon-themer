@@ -1,6 +1,7 @@
 """Shared paths and helpers for icon-themer."""
 import json
 import os
+import shutil
 import sys
 try:
     import tomllib  # Python 3.11+
@@ -9,14 +10,97 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 from pathlib import Path
 
 
-def _app_root() -> Path:
-    """Return the writable application root for source and packaged runs."""
+def _resource_root() -> Path:
+    """Return the directory containing bundled application resources."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 
 
-ROOT = _app_root()
+def _data_root() -> Path:
+    """Return a stable, per-user directory shared by source and packaged runs."""
+    override = os.environ.get("ICON_THEMER_DATA_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "IconThemer"
+    return Path.home() / "AppData" / "Local" / "IconThemer"
+
+
+RESOURCE_ROOT = _resource_root()
+ROOT = _data_root()
+
+
+def _rebase_paths(value, old_root: Path, new_root: Path):
+    """Rebase absolute paths nested inside migrated JSON data."""
+    if isinstance(value, dict):
+        return {k: _rebase_paths(v, old_root, new_root) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rebase_paths(v, old_root, new_root) for v in value]
+    if not isinstance(value, str):
+        return value
+
+    old = str(old_root)
+    old_prefix = old.rstrip("\\/") + os.sep
+    if value.lower().startswith(old_prefix.lower()):
+        return str(new_root) + value[len(old):]
+    return value
+
+
+def _write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    tmp.replace(path)
+
+
+def _migrate_legacy_data() -> None:
+    """Move data formerly stored beside the source/EXE into the user profile."""
+    ROOT.mkdir(parents=True, exist_ok=True)
+    if RESOURCE_ROOT == ROOT:
+        return
+
+    legacy_state = RESOURCE_ROOT / "state.json"
+    state_file = ROOT / "state.json"
+    if legacy_state.exists() and not state_file.exists():
+        for name in ("cache", "archive"):
+            source = RESOURCE_ROOT / "output" / name
+            if source.exists():
+                try:
+                    shutil.copytree(
+                        source, ROOT / "output" / name, dirs_exist_ok=True
+                    )
+                except OSError:
+                    pass
+
+        archive_index = ROOT / "output" / "archive" / "index.json"
+        if archive_index.exists():
+            try:
+                index = json.loads(archive_index.read_text(encoding="utf-8"))
+                _write_json(archive_index, _rebase_paths(index, RESOURCE_ROOT, ROOT))
+            except (OSError, ValueError):
+                pass
+
+        try:
+            state = json.loads(legacy_state.read_text(encoding="utf-8"))
+            _write_json(state_file, _rebase_paths(state, RESOURCE_ROOT, ROOT))
+        except (OSError, ValueError):
+            pass
+
+    for name in ("settings.json", "name_backup.json"):
+        source = RESOURCE_ROOT / name
+        destination = ROOT / name
+        if source.exists() and not destination.exists():
+            try:
+                shutil.copy2(source, destination)
+            except OSError:
+                pass
+
+
+_migrate_legacy_data()
 
 # --- Credentials: reuse the Codex CLI config (key + relay base_url) ---
 CODEX_DIR = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
@@ -63,12 +147,12 @@ def codex_credentials():
             base_url += "/v1"
 
     return api_key, base_url
-INPUT_DIR = ROOT / "input"
+INPUT_DIR = RESOURCE_ROOT / "input"
 OUTPUT_DIR = ROOT / "output"
-THEMES_DIR = ROOT / "themes"
-APPS_FILE = ROOT / "apps.json"
-ASSETS_DIR = ROOT / "assets"
-POWERSHELL_SCRIPTS_DIR = ROOT / "scripts" / "windows"
+THEMES_DIR = RESOURCE_ROOT / "themes"
+APPS_FILE = RESOURCE_ROOT / "apps.json"
+ASSETS_DIR = RESOURCE_ROOT / "assets"
+POWERSHELL_SCRIPTS_DIR = RESOURCE_ROOT / "scripts" / "windows"
 CACHE_DIR = OUTPUT_DIR / "cache"        # extracted current-icon thumbnails
 STATE_FILE = ROOT / "state.json"        # per-app theming / hide state
 NAME_BACKUP_FILE = ROOT / "name_backup.json"  # legacy, imported once into state

@@ -1,8 +1,8 @@
 # icon-themer
 
-[Download for Windows](https://github.com/despriber/icon-themer/releases/download/v0.1.1/IconThemer-v0.1.1-windows-x64.zip) · [Screenshots](#screenshots) · **Restore is supported**
+[Download for Windows](https://github.com/despriber/icon-themer/releases/download/v0.1.2/IconThemer-v0.1.2-windows-x64.zip) · [Screenshots](#screenshots) · **Restore is supported**
 
-> Windows 一键版：下载 zip 后解压，双击 `IconThemer.exe` 运行。应用会请求管理员权限，用于修改公共桌面快捷方式、文件夹图标和快捷方式箭头；所有改动都可以在工具内一键恢复。
+> Windows 一键版：下载 zip 后解压，双击 `IconThemer.exe` 运行。应用会请求管理员权限，用于修改公共桌面快捷方式、文件夹图标和快捷方式箭头；所有改动都可以在工具内一键恢复。用户状态、设置、生成历史和缓存保存在 `%LOCALAPPDATA%\IconThemer`，移动或升级程序目录不会丢失恢复信息。
 
 一个 Windows 桌面 GUI 工具：用图像生成模型把桌面上的**快捷方式和文件夹图标**批量重绘成统一画风
 （内置 OneShot 像素风主题），让桌面整体协调好看。全程**可逆**——随时一键恢复原图标和原名称。
@@ -77,7 +77,7 @@ conda activate icon-themer
   （仓库默认值 `gpt-image-2` 是作者私有中转里的名字，**别人用要换成自己服务支持的模型**。）
 - **启用图片编辑接口**：开 = img2img 优先（重绘更像原图），不可用时自动回退文生图。
 
-点**保存**后会写入项目根目录的 `settings.json`，**下次启动自动读取**；之后再改也会写回该文件。
+点**保存**后会写入 `%LOCALAPPDATA%\IconThemer\settings.json`，**下次启动自动读取**；之后再改也会写回该文件。
 `settings.json` 仅存在本地、含明文密钥，已被 `.gitignore` 忽略，不会进版本库。
 
 > 也支持不填设置、走回退：环境变量 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，或本机 Codex CLI 配置

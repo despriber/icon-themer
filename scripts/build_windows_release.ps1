@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "v0.1.0",
+    [string]$Version = "v0.1.2",
     [string]$Python = "python",
     [switch]$SkipInstall
 )
@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $distRoot = Join-Path $repoRoot "dist"
 $buildRoot = Join-Path $repoRoot "build"
+$workRoot = Join-Path $buildRoot "release"
 $builtDir = Join-Path $distRoot "IconThemer"
 $packageName = "IconThemer-$Version-windows-x64"
 $packageDir = Join-Path $distRoot $packageName
@@ -20,7 +21,7 @@ if (-not $SkipInstall) {
     & $Python -m pip install -r requirements.txt -r requirements-build.txt
 }
 
-foreach ($path in @($builtDir, $packageDir, $zipPath, $buildRoot)) {
+foreach ($path in @($builtDir, $packageDir, $zipPath, $workRoot)) {
     if (Test-Path $path) {
         Remove-Item -LiteralPath $path -Recurse -Force
     }
@@ -32,6 +33,7 @@ foreach ($path in @($builtDir, $packageDir, $zipPath, $buildRoot)) {
     --onedir `
     --windowed `
     --name IconThemer `
+    --workpath $workRoot `
     --paths (Join-Path $repoRoot "src") `
     app.py
 
